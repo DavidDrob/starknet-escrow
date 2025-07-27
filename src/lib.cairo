@@ -6,6 +6,8 @@ pub trait IDestinationEscrow<TContractState> {
 // SPDX-License-Identifier: MIT
 #[starknet::contract]
 mod DestinationEscrow {
+    use core::hash::{HashStateExTrait, HashStateTrait};
+    use core::poseidon::PoseidonTrait;
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_caller_address};
 
@@ -26,6 +28,9 @@ mod DestinationEscrow {
         fn withdraw(ref self: ContractState, secret: felt252) {
             let caller = get_caller_address();
             assert(caller == self.taker.read(), 'Caller is not taker');
+
+            let secret_hashed = PoseidonTrait::new().update_with(secret).finalize();
+            assert(secret_hashed == self.hashlock.read(), 'Incorrect secret');
         }
     }
 }
