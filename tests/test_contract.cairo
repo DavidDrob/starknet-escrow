@@ -5,12 +5,19 @@ use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starknet::{ContractAddress, get_contract_address};
+use starknet::{ContractAddress, get_block_info, get_contract_address};
 use starknet_escrow::test_token::{TestToken, deploy as deploy_token};
 use starknet_escrow::{
     IDestinationEscrowDispatcher, IDestinationEscrowDispatcherTrait,
     IDestinationEscrowSafeDispatcher, IDestinationEscrowSafeDispatcherTrait,
 };
+
+#[derive(Drop, Serde, starknet::Store)]
+struct Timelocks {
+    withdrawal: u64,
+    publicWithdrawal: u64,
+    cancellation: u64,
+}
 
 fn deploy_destination_escrow() -> ContractAddress {
     let contract = declare("DestinationEscrow").unwrap().contract_class();
@@ -24,17 +31,27 @@ fn deploy_destination_escrow() -> ContractAddress {
         .update_with(secret)
         .finalize(); // 26439584174109800712083033069066874202485490695772359629503443471327618552
 
+    let now = get_block_info().block_number;
+    let timelocks = Timelocks {
+        withdrawal: now + 86_400,
+        publicWithdrawal: now + 86_400 * 2,
+        cancellation: now + 86_400 * 3,
+    };
+
     //let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token };
     //test_token_dispatcher.approve();
 
     let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
-    Serde::serialize(@(taker, secret_hash, test_token, amount), ref constructor_calldata);
+    Serde::serialize(
+        @(taker, secret_hash, test_token, amount, timelocks), ref constructor_calldata,
+    );
 
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
 
     contract_address
 }
 
+// TODO: fix tests to go with timelock
 #[test]
 #[feature("safe_dispatcher")]
 fn test_withdraw() {
