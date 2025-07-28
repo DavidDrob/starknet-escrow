@@ -1,10 +1,12 @@
 use core::hash::{HashStateExTrait, HashStateTrait};
 use core::poseidon::PoseidonTrait;
+use openzeppelin_token::erc20::interface::IERC20Dispatcher;
 use snforge_std::{
     ContractClassTrait, DeclareResultTrait, declare, start_cheat_caller_address,
     stop_cheat_caller_address,
 };
-use starknet::ContractAddress;
+use starknet::{ContractAddress, get_contract_address};
+use starknet_escrow::test_token::{TestToken, deploy as deploy_token};
 use starknet_escrow::{
     IDestinationEscrowDispatcher, IDestinationEscrowDispatcherTrait,
     IDestinationEscrowSafeDispatcher, IDestinationEscrowSafeDispatcherTrait,
@@ -12,13 +14,21 @@ use starknet_escrow::{
 
 fn deploy_destination_escrow() -> ContractAddress {
     let contract = declare("DestinationEscrow").unwrap().contract_class();
+    let amount: u256 = 100000000000000000000; // 100e18
 
+    let test_token = deploy_token(get_contract_address(), amount.into());
+    //let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token };
     let taker: ContractAddress = 'taker'.try_into().unwrap();
     let secret: felt252 = 'secret';
     let secret_hash = PoseidonTrait::new()
         .update_with(secret)
         .finalize(); // 26439584174109800712083033069066874202485490695772359629503443471327618552
-    let constructor_calldata = array![taker.into(), secret_hash.into()];
+
+    //let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token };
+    //test_token_dispatcher.approve();
+
+    let mut constructor_calldata: Array<felt252> = ArrayTrait::new();
+    Serde::serialize(@(taker, secret_hash, test_token, amount), ref constructor_calldata);
 
     let (contract_address, _) = contract.deploy(@constructor_calldata).unwrap();
 
