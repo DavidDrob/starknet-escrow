@@ -114,3 +114,64 @@ fn test_withdraw() {
     let balance_after = test_token_dispatcher.balance_of(taker);
     assert(balance_after - balance_before == 100000000000000000000, 'Withdrawal went wrong');
 }
+
+#[test]
+#[feature("safe_dispatcher")]
+fn test_cancel() {
+    let (contract_address, test_token_address) = deploy_destination_escrow();
+    let taker: ContractAddress = 'taker'.try_into().unwrap();
+
+    let safe_dispatcher = IDestinationEscrowSafeDispatcher { contract_address };
+
+    let now = get_block_info().block_number;
+    start_cheat_block_number(contract_address, now + 86_400 + 1);
+    match safe_dispatcher.cancel() {
+        Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
+        Result::Err(panic_data) => {
+            assert(*panic_data.at(0) == 'Invalid time', *panic_data.at(0));
+        },
+    }
+
+    let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token_address };
+    let balance_before = test_token_dispatcher.balance_of(taker);
+
+    stop_cheat_block_number(contract_address);
+
+    start_cheat_caller_address(safe_dispatcher.contract_address, taker);
+    start_cheat_block_number(contract_address, now + (86_400 * 3) + 1);
+
+    safe_dispatcher.cancel().unwrap(); // unwrap works => didnt panic
+    stop_cheat_caller_address(safe_dispatcher.contract_address);
+    stop_cheat_block_number(contract_address);
+
+    let balance_after = test_token_dispatcher.balance_of(taker);
+    assert(balance_after - balance_before == 100000000000000000000, 'Cancellation went wrong');
+}
+
+#[test]
+#[feature("safe_dispatcher")]
+fn test_cant_cancel_after_withdrawal() {
+    let (contract_address, test_token_address) = deploy_destination_escrow();
+    let taker: ContractAddress = 'taker'.try_into().unwrap();
+    let secret: felt252 = 'secret';
+
+    let safe_dispatcher = IDestinationEscrowSafeDispatcher { contract_address };
+
+    let now = get_block_info().block_number;
+    start_cheat_caller_address(safe_dispatcher.contract_address, taker);
+    start_cheat_block_number(contract_address, now + 86_400 + 1);
+    safe_dispatcher.withdraw(secret).unwrap(); // unwrap works => didnt panic
+
+    stop_cheat_block_number(contract_address);
+    start_cheat_block_number(contract_address, now + (86_400 * 3) + 1);
+
+    match safe_dispatcher.cancel() {
+        Result::Ok(_) => core::panic_with_felt252('Should have panicked'),
+        Result::Err(panic_data) => {
+            assert(*panic_data.at(0) == 'Withdraw already happend', *panic_data.at(0));
+        },
+    }
+
+    stop_cheat_block_number(contract_address);
+    stop_cheat_caller_address(contract_address);
+}

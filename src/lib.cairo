@@ -1,6 +1,7 @@
 #[starknet::interface]
 pub trait IDestinationEscrow<TContractState> {
     fn withdraw(ref self: TContractState, secret: felt252);
+    fn cancel(ref self: TContractState);
 }
 
 // SPDX-License-Identifier: MIT
@@ -10,7 +11,7 @@ mod DestinationEscrow {
     use core::poseidon::PoseidonTrait;
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
-    use starknet::{ContractAddress, get_block_info, get_caller_address};
+    use starknet::{ContractAddress, get_block_info, get_caller_address, get_contract_address};
 
     #[derive(Drop, Serde, starknet::Store)]
     struct Timelocks {
@@ -66,8 +67,22 @@ mod DestinationEscrow {
 
             let amount = self.amount.read();
             let token_dispatcher = self.token.read();
-            //let token_dispatcher = IERC20Dispatcher { contract_address: token };
             token_dispatcher.transfer(caller, amount);
+            // TODO: return safety deposit
+        }
+
+        fn cancel(ref self: ContractState) {
+            assert(is_after(self.timelocks.read().cancellation), 'Invalid time');
+
+            let caller = get_caller_address();
+            assert(caller == self.taker.read(), 'Caller is not taker');
+
+            let amount = self.amount.read();
+            let token_dispatcher = self.token.read();
+            let balance = token_dispatcher.balance_of(get_contract_address());
+            assert(balance >= amount, 'Withdraw already happend');
+            token_dispatcher.transfer(caller, amount);
+            // TODO: return safety deposit
         }
     }
 
