@@ -7,11 +7,8 @@ use snforge_std::{
     stop_cheat_caller_address,
 };
 use starknet::{ContractAddress, get_block_info, get_contract_address};
-use starknet_escrow::test_token::{TestToken, deploy as deploy_token};
-use starknet_escrow::{
-    IDestinationEscrowDispatcher, IDestinationEscrowDispatcherTrait,
-    IDestinationEscrowSafeDispatcher, IDestinationEscrowSafeDispatcherTrait,
-};
+use starknet_escrow::test_token::deploy as deploy_token;
+use starknet_escrow::{IDestinationEscrowSafeDispatcher, IDestinationEscrowSafeDispatcherTrait};
 
 const STRK_ADDRESS: ContractAddress =
     0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
@@ -61,8 +58,8 @@ fn deploy_destination_escrow() -> (ContractAddress, ContractAddress) {
     set_balance(get_contract_address(), SAFETY_DEPOSIT, Token::STRK);
     // transfer safety deposit
     // TODO: do the transfer in constructor
-    let eth_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
-    eth_token_dispatcher.transfer(contract_address, SAFETY_DEPOSIT);
+    let strk_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
+    strk_token_dispatcher.transfer(contract_address, SAFETY_DEPOSIT);
 
     (contract_address, test_token)
 }
@@ -104,15 +101,24 @@ fn test_withdraw() {
     }
 
     let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token_address };
-    let balance_before = test_token_dispatcher.balance_of(taker);
+    let strk_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
+    let token_balance_before = test_token_dispatcher.balance_of(taker);
+    let strk_balance_before = strk_token_dispatcher.balance_of(taker);
 
     // correct secret, correct caller
     safe_dispatcher.withdraw(secret).unwrap(); // unwrap works => didnt panic
     stop_cheat_caller_address(safe_dispatcher.contract_address);
     stop_cheat_block_number(contract_address);
 
-    let balance_after = test_token_dispatcher.balance_of(taker);
-    assert(balance_after - balance_before == 100000000000000000000, 'Withdrawal went wrong');
+    let token_balance_after = test_token_dispatcher.balance_of(taker);
+    let strk_balance_after = strk_token_dispatcher.balance_of(taker);
+    assert(
+        token_balance_after - token_balance_before == 100000000000000000000,
+        'Withdrawal went wrong',
+    );
+    assert(
+        strk_balance_after - strk_balance_before == 1000000000000000000, 'Withdrawal went wrong',
+    );
 }
 
 #[test]
@@ -133,7 +139,9 @@ fn test_cancel() {
     }
 
     let test_token_dispatcher = IERC20Dispatcher { contract_address: test_token_address };
-    let balance_before = test_token_dispatcher.balance_of(taker);
+    let strk_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
+    let token_balance_before = test_token_dispatcher.balance_of(taker);
+    let strk_balance_before = strk_token_dispatcher.balance_of(taker);
 
     stop_cheat_block_number(contract_address);
 
@@ -144,8 +152,15 @@ fn test_cancel() {
     stop_cheat_caller_address(safe_dispatcher.contract_address);
     stop_cheat_block_number(contract_address);
 
-    let balance_after = test_token_dispatcher.balance_of(taker);
-    assert(balance_after - balance_before == 100000000000000000000, 'Cancellation went wrong');
+    let token_balance_after = test_token_dispatcher.balance_of(taker);
+    let strk_balance_after = strk_token_dispatcher.balance_of(taker);
+    assert(
+        token_balance_after - token_balance_before == 100000000000000000000,
+        'Withdrawal went wrong',
+    );
+    assert(
+        strk_balance_after - strk_balance_before == 1000000000000000000, 'Withdrawal went wrong',
+    );
 }
 
 #[test]

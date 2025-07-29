@@ -1,8 +1,16 @@
+use starknet::ContractAddress;
+
 #[starknet::interface]
 pub trait IDestinationEscrow<TContractState> {
     fn withdraw(ref self: TContractState, secret: felt252);
     fn cancel(ref self: TContractState);
 }
+
+const STRK_ADDRESS: ContractAddress =
+    0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d
+    .try_into()
+    .unwrap();
+const SAFETY_DEPOSIT: u256 = 1000000000000000000; // 1e18
 
 // SPDX-License-Identifier: MIT
 #[starknet::contract]
@@ -12,6 +20,7 @@ mod DestinationEscrow {
     use openzeppelin_token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
     use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
     use starknet::{ContractAddress, get_block_info, get_caller_address, get_contract_address};
+    use super::{SAFETY_DEPOSIT, STRK_ADDRESS};
 
     #[derive(Drop, Serde, starknet::Store)]
     struct Timelocks {
@@ -68,7 +77,9 @@ mod DestinationEscrow {
             let amount = self.amount.read();
             let token_dispatcher = self.token.read();
             token_dispatcher.transfer(caller, amount);
-            // TODO: return safety deposit
+
+            let eth_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
+            eth_token_dispatcher.transfer(caller, SAFETY_DEPOSIT);
         }
 
         fn cancel(ref self: ContractState) {
@@ -82,7 +93,9 @@ mod DestinationEscrow {
             let balance = token_dispatcher.balance_of(get_contract_address());
             assert(balance >= amount, 'Withdraw already happend');
             token_dispatcher.transfer(caller, amount);
-            // TODO: return safety deposit
+
+            let eth_token_dispatcher = IERC20Dispatcher { contract_address: STRK_ADDRESS };
+            eth_token_dispatcher.transfer(caller, SAFETY_DEPOSIT);
         }
     }
 

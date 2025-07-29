@@ -1,6 +1,5 @@
 use snforge_std::{ContractClassTrait, DeclareResultTrait, declare};
 use starknet::ContractAddress;
-use starknet::syscalls::deploy_syscall;
 
 #[starknet::contract]
 pub mod TestToken {
